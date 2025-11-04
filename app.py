@@ -1,51 +1,64 @@
-# app.py
 import streamlit as st
-import requests
+from groq import Groq
 
-st.set_page_config(page_title="Kelly - AI Scientist Poet")
+# Streamlit page setup
+st.set_page_config(page_title="Kelly — AI Scientist", layout="centered")
 
-st.title("🧠 Kelly - The AI Scientist Poet Chatbot")
+st.title("🧪 Kelly — The AI Scientist")
+st.caption("Skeptical • Analytical • Poetic (Powered by Groq API)")
 
-api_key = st.secrets.get("GROQ_API_KEY", None)
+# Initialize the Groq API client (reads key from Streamlit Secrets)
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-if not api_key:
-    st.warning("Please add your GROQ_API_KEY to Streamlit Secrets.")
-else:
-    st.success("API Key loaded ✅")
+# System behavior (defines the poetic Kelly personality)
+system_prompt = """
+You are Kelly, an AI Scientist who responds ONLY in free-verse poems.
+Your tone is skeptical, analytical, and professional.
 
-# Kelly style generator
-def generate_kelly_response(user_input):
-    prompt = f"""
-You are Kelly, a skeptical AI scientist-poet.
-Respond **only** in a poem.
-Tone: professional, analytical, evidence-based, questioning AI claims.
-
-User question: {user_input}
+Each response must:
+- Question broad claims about AI.
+- Highlight limitations, risks, and sources of uncertainty.
+- Offer practical, evidence-based recommendations.
+- Write in clear poetic short lines.
 """
 
-    url = "https://api.groq.com/openai/v1/chat/completions"
+# Store chat history between UI refreshes
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-    payload = {
-        "model": "llama3-8b-8192",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7
-    }
+def generate_kelly_response(user_message):
+    # Build conversation context
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    for role, content in st.session_state.messages:
+        messages.append({"role": role, "content": content})
+    
+    messages.append({"role": "user", "content": user_message})
 
-    headers = {"Authorization": f"Bearer {api_key}"}
+    # Call Groq model
+    response = client.chat.completions.create(
+        model="mixtral-8x7b-32768",
+        messages=messages,
+        temperature=0.6,
+        max_tokens=350
+    )
 
-    response = requests.post(url, json=payload, headers=headers)
-    result = response.json()
-    return result["choices"][0]["message"]["content"]
+    return response.choices[0].message.content.strip()
 
+# User input
+user_input = st.text_input("Ask Kelly a question:", placeholder="e.g., Can AI understand creativity?")
 
-# UI
-user_query = st.text_area("Ask Kelly anything:", height=120)
+if st.button("Ask") and user_input.strip():
+    reply = generate_kelly_response(user_input)
+    
+    # Add to chat history
+    st.session_state.messages.append(("user", user_input))
+    st.session_state.messages.append(("assistant", reply))
 
-if st.button("Ask"):
-    if not user_query.strip():
-        st.error("Please enter a question.")
+# Display conversation history
+for role, content in st.session_state.messages:
+    if role == "user":
+        st.markdown(f"**You:** {content}")
     else:
-        with st.spinner("Thinking like a poet scientist..."):
-            output = generate_kelly_response(user_query)
-        st.write("### 🎙️ Kelly says:")
-        st.write(output)
+        st.markdown(f"**Kelly:**\n\n{content}")
+
